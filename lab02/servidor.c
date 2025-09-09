@@ -14,9 +14,12 @@
 
 int main(void) {
     int listenfd, connfd;
+
+    // essa struct guarda qual protocolo estamos usando e qual porta foi alocada pelo socket
+    // ela descreve o socket
     struct sockaddr_in servaddr;
 
-    // socket
+    // cria o socket
     if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("socket");
         return 1;
@@ -26,7 +29,7 @@ int main(void) {
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family      = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); 
-    servaddr.sin_port        = htons(13);              
+    servaddr.sin_port        = 0;              
 
     if (bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
         perror("bind");
@@ -57,6 +60,19 @@ int main(void) {
             perror("accept");
             continue; // segue escutando
         }
+
+        struct sockaddr_in bound; socklen_t blen = sizeof(bound);
+        if (getpeername(connfd, (struct sockaddr*)&bound, &blen) == 0) {
+            unsigned short p = ntohs(bound.sin_port);
+
+            
+
+            printf("remoto:%s:%u\n", inet_ntoa(bound.sin_addr), p);
+        } else {
+            printf("Error: %s\n", strerror(errno));
+        }
+
+
 
         // envia banner "Hello + Time"
         char buf[MAXDATASIZE];

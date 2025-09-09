@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
     // IP/PORT (argumentos ou server.info)
     char ip[INET_ADDRSTRLEN] = "127.0.0.1";
-    unsigned short port = 13;
+    unsigned short port = 1024;
 
     if (argc >= 2) strncpy(ip, argv[1], sizeof(ip)-1);
     if (argc >= 3) port = (unsigned short)atoi(argv[2]);
@@ -63,6 +63,14 @@ int main(int argc, char **argv) {
         close(sockfd);
         return 1;
     }
+
+    struct sockaddr_in bound; socklen_t blen = sizeof(bound);
+    if (getsockname(sockfd, (struct sockaddr*)&bound, &blen) == 0) {
+        unsigned short p = ntohs(bound.sin_port);
+        printf("local::%u\n", p);
+    }
+
+
 
     // lê e imprime o banner (uma leitura basta neste cenário)
     char banner[MAXLINE + 1];
