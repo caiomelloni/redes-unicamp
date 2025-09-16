@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #define MAXLINE 4096
+#define MAXDATASIZE  256
 
 int main(int argc, char **argv) {
     int    sockfd;
@@ -67,10 +68,17 @@ int main(int argc, char **argv) {
     struct sockaddr_in bound; socklen_t blen = sizeof(bound);
     if (getsockname(sockfd, (struct sockaddr*)&bound, &blen) == 0) {
         unsigned short p = ntohs(bound.sin_port);
-        printf("local::%u\n", p);
+        printf("local: %s:%u\n", inet_ntoa(bound.sin_addr), p);
     }
 
-
+    // lê uma linha do stdin e envia para o servirdor
+    char buf[MAXDATASIZE];
+    char buf_res[MAXDATASIZE];
+    printf("Mensagem para o servidor: ");
+    fgets(buf, sizeof(buf), stdin);
+    strcpy(buf_res, "[CLI MSG] ");
+    strcat(buf_res, buf);
+    (void)write(sockfd, buf_res, strlen(buf_res));
 
     // lê e imprime o banner (uma leitura basta neste cenário)
     char banner[MAXLINE + 1];
