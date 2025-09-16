@@ -10,6 +10,7 @@
 #include <errno.h>
 
 #define LISTENQ      10
+#define MAXLINE 4096
 #define MAXDATASIZE  256
 
 int main(void) {
@@ -64,21 +65,25 @@ int main(void) {
         struct sockaddr_in bound; socklen_t blen = sizeof(bound);
         if (getpeername(connfd, (struct sockaddr*)&bound, &blen) == 0) {
             unsigned short p = ntohs(bound.sin_port);
-
-            
-
-            printf("remoto:%s:%u\n", inet_ntoa(bound.sin_addr), p);
+            printf("remoto: %s:%u\n", inet_ntoa(bound.sin_addr), p);
         } else {
             printf("Error: %s\n", strerror(errno));
         }
-
-
 
         // envia banner "Hello + Time"
         char buf[MAXDATASIZE];
         time_t ticks = time(NULL); // ctime() já inclui '\n'
         snprintf(buf, sizeof(buf), "Hello from server!\nTime: %.24s\r\n", ctime(&ticks));
         (void)write(connfd, buf, strlen(buf));
+        
+        // lê a mensagem enviada pelo cliente e imprime na saída padrão
+        char banner[MAXLINE + 1];
+        ssize_t n = read(connfd, banner, MAXLINE);
+        if (n > 0) {
+            banner[n] = 0;
+            fputs(banner, stdout);
+            fflush(stdout);
+        }
 
         close(connfd); // fecha só a conexão aceita; servidor segue escutando
     }
