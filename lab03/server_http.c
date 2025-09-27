@@ -110,6 +110,20 @@ void process_request(int connfd) {
 
 }
 
+// Listen muda o socket para o estado de listening e seta o tamanho maximo da fila de conexões
+//
+// em caso de erro, para a execução do serve
+void Listen(int listenfd, int tamanho_fila) {
+  // listen
+  if (listen(listenfd, tamanho_fila) == -1) {
+      perror("listen => erro: não foi possível ativar o listning socket");
+      close(listenfd);
+      exit(1);
+  }
+}
+
+
+
 // log_server_info printa a porta e ip do servidor 
 // tambem divulga as informacoes no arquivo server.info
 void log_server_info(int listenfd) {
@@ -143,20 +157,17 @@ int main(int argc, char **argv) {
 
     log_server_info(listenfd);
 
-    // listen
-    if (listen(listenfd, LISTENQ) == -1) {
-        perror("listen");
-        close(listenfd);
-        return 1;
-    }
+    Listen(listenfd, LISTENQ);
+
 
     // laço: aceita clientes, envia banner e fecha a conexão do cliente
     for (;;) {
-        connfd = Accept(listenfd, NULL, NULL);
+        connfd = Accept(listenfd);
         if (connfd == -1) {
             perror("accept");
             continue; // segue escutando
         }
+        pid_t pid;
         if ((pid = Fork()) == 0) {
           Close(listenfd);
           process_request(connfd);

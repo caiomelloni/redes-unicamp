@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
 
     // IP/PORT (argumentos ou server.info)
     char ip[INET_ADDRSTRLEN] = "127.0.0.1";
-    unsigned short port = 1024;
+    unsigned short port = 0;
 
     if (argc >= 2) strncpy(ip, argv[1], sizeof(ip)-1);
     if (argc >= 3) port = (unsigned short)atoi(argv[2]);
