@@ -13,6 +13,16 @@
 #define MAXLINE 4096
 #define MAXDATASIZE  256
 
+// get_time returna uma string com a data atual na forma "Wed Jun 30 21:49:08 1993\n" 
+char* get_time() {
+  time_t ticks = time(NULL); // ctime() já inclui '\n'
+  return ctime(&ticks);
+}
+
+void echo_servidor(char* msg) {
+  printf("[SERVIDOR] (%.24s): %s\r\n", get_time(), msg);
+}
+
 // Fork cria um novo processo filho
 // retorna o pid do filho ao pai
 // o processo filho recebe um pid de valor '0'
@@ -33,10 +43,23 @@ int Fork() {
 // em caso de erro, printa o erro
 // mas nao para a execucao do server
 int Accept(int listenfd) {
+  struct sockaddr_in cliaddr;
+  memset(&cliaddr, 0, sizeof(cliaddr));
+  socklen_t cliaddr_len = sizeof(cliaddr);
   int file_descriptor;
-  if ((file_descriptor = accept(listenfd, NULL, NULL)) < 0) {
+  if ((file_descriptor = accept(listenfd, (struct sockaddr *)&cliaddr, &cliaddr_len)) < 0) {
     perror("accept => erro: não foi possĩvel aceitar uma nova conexão");
+    return -1;
   }
+
+  char cli_ip[INET_ADDRSTRLEN];
+  inet_ntop(AF_INET, &cliaddr.sin_addr, cli_ip, sizeof(cli_ip));
+  int cli_port = ntohs(cliaddr.sin_port);
+
+  char cli_info[INET_ADDRSTRLEN + 54];
+  snprintf(cli_info, sizeof(cli_info), "nova conexão aceita, cliente: %s:%d", cli_ip, cli_port);
+  echo_servidor(cli_info);
+  
   return file_descriptor;
 }
 
@@ -77,35 +100,59 @@ struct sockaddr_in Bind(int listenfd, int porta) {
   servaddr.sin_port        = htons(porta);              
 
   if (bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
-      perror("bind => erro: não foi possível fazer o bind do listening socket do servidor");
-      close(listenfd);
-      exit(1);
+    perror("bind => erro: não foi possível fazer o bind do listening socket do servidor");
+    close(listenfd);
+    exit(1);
   }
 
   return servaddr;
 }
 
-void process_request(int connfd) {
-  time_t ticks = time(NULL); // ctime() já inclui '\n'
-  struct sockaddr_in bound; socklen_t blen = sizeof(bound);
-  if (getpeername(connfd, (struct sockaddr*)&bound, &blen) == 0) {
-      unsigned short p = ntohs(bound.sin_port);
-      printf("remoto: %s:%u\n", inet_ntoa(bound.sin_addr), p);
-  } else {
-      printf("Error: %s\n", strerror(errno));
-  }
-  // envia banner "Hello + Time"
+int Write(char* response, int connfd) {
   char buf[MAXDATASIZE];
-  snprintf(buf, sizeof(buf), "Hello from server!\nTime: %.24s\r\n", ctime(&ticks));
-  (void)write(connfd, buf, strlen(buf));
-  
+  snprintf(buf, sizeof(buf), response);
+  return write(connfd, response, strlen(response));
+}
+ 
+int eh_requisicao_get(const char* request) {
+    char* get_http_1   = "GET / HTTP/1.0";
+    char* get_http_1_1 = "GET / HTTP/1.1";
+
+    return strstr(request, get_http_1) != NULL || strstr(request, get_http_1_1) != NULL;
+}
+
+
+void process_request(int connfd) {
+
   // lê a mensagem enviada pelo cliente e imprime na saída padrão
-  char banner[MAXLINE + 1];
-  ssize_t n = read(connfd, banner, MAXLINE);
+  char request[MAXLINE + 1];
+  ssize_t n = read(connfd, request, MAXLINE);
+  sleep(30);
   if (n > 0) {
-      banner[n] = 0;
-      fputs(banner, stdout);
+      request[n] = 0; // coloca '\0' no final da string, garante que seja uma string C valida
+      char* response;
+
+      echo_servidor("request recebido | msg:");
+      fputs(request, stdout);
       fflush(stdout);
+
+      int ok;
+      if (eh_requisicao_get(request)) {
+        response = "HTTP/1.0 200 OK\r\n"
+                   "Content-Type: text/html\r\n"
+                   "Content-Length: 91\r\n"
+                   "Connection: close\r\n"
+                   "\r\n"
+                   "<html><head><title>MC833</title</head><body><h1>MC833 TCP"
+                   "Concorrente </h1></body></html>";
+        ok = Write(response, connfd) != -1;
+      } else {
+        response = "400 Bad Request\n";
+        ok = Write(response, connfd) != -1;
+      }  
+      if (!ok) {
+        perror("write => erro: não foi possível enviar a mensagem ao cliente");
+      }
   }
 
 }
@@ -151,22 +198,17 @@ int main(int argc, char **argv) {
     // cria o socket
     listenfd = Socket(AF_INET, SOCK_STREAM);
 
-    // essa struct guarda qual protocolo estamos usando e qual porta foi alocada pelo socket
-    // ela descreve o socket
-    struct sockaddr_in servaddr = Bind(listenfd, porta);
+    Bind(listenfd, porta);
 
     log_server_info(listenfd);
 
     Listen(listenfd, LISTENQ);
 
 
-    // laço: aceita clientes, envia banner e fecha a conexão do cliente
+    // laço: aceita clientes, processa requisicao e fecha a conexão do cliente
     for (;;) {
         connfd = Accept(listenfd);
-        if (connfd == -1) {
-            perror("accept");
-            continue; // segue escutando
-        }
+
         pid_t pid;
         if ((pid = Fork()) == 0) {
           Close(listenfd);

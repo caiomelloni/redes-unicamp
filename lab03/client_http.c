@@ -15,9 +15,79 @@
 #define MAXLINE 4096
 #define MAXDATASIZE  256
 
+// Socket cria um endpoint de comunicacao e retorna um file_descriptor para esse endpoint
+//
+// em caso de erro, para a execucao do servidor
+int Socket() {
+  int sockfd;
+  if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+      perror("socket => erro: não foi possível criar um listening socket");
+      exit(1);
+  }
+  return sockfd;
+}
+
+void Connect(int sockfd, char* ip, int port) {
+    struct sockaddr_in servaddr;
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port   = htons(port);
+    if (inet_pton(AF_INET, ip, &servaddr.sin_addr) <= 0) {
+        perror("inet_pton error");
+        close(sockfd);
+        exit(1);
+    }
+    if (connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
+        perror("connect error");
+        close(sockfd);
+        exit(1);
+    }
+}
+
+
+// Write envia uma mensage ao servidor, se 'send_msg' for nulo
+// entao envia uma mensagem padrao
+int Write(char* send_msg, int connfd) {
+  if (send_msg == NULL) {
+    send_msg = "GET / HTTP/1.0\r\n"
+               "Host: teste\r\n"
+               "\r\n";
+  }
+  char buf[MAXDATASIZE];
+  snprintf(buf, sizeof(buf), send_msg);
+  return write(connfd, send_msg, strlen(send_msg));
+}
+
+void log_infos_locais_e_remoto(int sockfd) {
+    struct sockaddr_in bound; 
+    socklen_t blen = sizeof(bound);
+
+    if (getsockname(sockfd, (struct sockaddr*)&bound, &blen) == 0) {
+        unsigned short p = ntohs(bound.sin_port);
+        printf("local : %s:%u\n", inet_ntoa(bound.sin_addr), p); 
+    } else {
+        perror("getsockname");
+    }
+
+    struct sockaddr_in peer; 
+    socklen_t plen = sizeof(peer);
+
+    if (getpeername(sockfd, (struct sockaddr*)&peer, &plen) == 0) {
+        unsigned short p = ntohs(peer.sin_port);
+        printf("remoto: %s:%u\n", inet_ntoa(peer.sin_addr), p); 
+    } else {
+        perror("getpeername");
+    }
+}
+
+ssize_t Read(int sockfd, char* banner, int max_line) {
+    ssize_t n = read(sockfd, banner, max_line);
+    return n;
+}
+
+
 int main(int argc, char **argv) {
     int    sockfd;
-    struct sockaddr_in servaddr;
 
     // IP/PORT (argumentos ou server.info)
     char ip[INET_ADDRSTRLEN] = "127.0.0.1";
@@ -44,45 +114,19 @@ int main(int argc, char **argv) {
 
     }
 
-    // socket
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("socket error");
-        return 1;
+    sockfd = Socket();
+    
+    Connect(sockfd, ip, port);
+
+    if (Write(NULL, sockfd) == -1) {
+      perror("write => erro: não foi possível enviar a mensagem ao servidor");
     }
 
-    // connect
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port   = htons(port);
-    if (inet_pton(AF_INET, ip, &servaddr.sin_addr) <= 0) {
-        perror("inet_pton error");
-        close(sockfd);
-        return 1;
-    }
-    if (connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
-        perror("connect error");
-        close(sockfd);
-        return 1;
-    }
-
-    struct sockaddr_in bound; socklen_t blen = sizeof(bound);
-    if (getsockname(sockfd, (struct sockaddr*)&bound, &blen) == 0) {
-        unsigned short p = ntohs(bound.sin_port);
-        printf("local: %s:%u\n", inet_ntoa(bound.sin_addr), p);
-    }
-
-    // lê uma linha do stdin e envia para o servirdor
-    char buf[MAXDATASIZE];
-    char buf_res[MAXDATASIZE];
-    printf("Mensagem para o servidor: ");
-    fgets(buf, sizeof(buf), stdin);
-    strcpy(buf_res, "[CLI MSG] ");
-    strcat(buf_res, buf);
-    (void)write(sockfd, buf_res, strlen(buf_res));
+    log_infos_locais_e_remoto(sockfd);
 
     // lê e imprime o banner (uma leitura basta neste cenário)
     char banner[MAXLINE + 1];
-    ssize_t n = read(sockfd, banner, MAXLINE);
+    ssize_t n = Read(sockfd, banner, MAXLINE);
     if (n > 0) {
         banner[n] = 0;
         fputs(banner, stdout);
