@@ -127,7 +127,6 @@ void process_request(int connfd) {
   // lê a mensagem enviada pelo cliente e imprime na saída padrão
   char request[MAXLINE + 1];
   ssize_t n = read(connfd, request, MAXLINE);
-  sleep(30);
   if (n > 0) {
       request[n] = 0; // coloca '\0' no final da string, garante que seja uma string C valida
       char* response;
