@@ -110,7 +110,7 @@ struct sockaddr_in Bind(int listenfd, int porta) {
 
 int Write(char* response, int connfd) {
   char buf[MAXDATASIZE];
-  snprintf(buf, sizeof(buf), response);
+  snprintf(buf, sizeof(buf), "%s", response);
   return write(connfd, response, strlen(response));
 }
  
@@ -210,6 +210,7 @@ int main(int argc, char **argv) {
 
         pid_t pid;
         if ((pid = Fork()) == 0) {
+          sleep(10);
           Close(listenfd);
           process_request(connfd);
           Close(connfd); // fecha só a conexão aceita; servidor segue escutando

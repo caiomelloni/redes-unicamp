@@ -54,7 +54,7 @@ int Write(char* send_msg, int connfd) {
                "\r\n";
   }
   char buf[MAXDATASIZE];
-  snprintf(buf, sizeof(buf), send_msg);
+  snprintf(buf, sizeof(buf), "%s",send_msg);
   return write(connfd, send_msg, strlen(send_msg));
 }
 
