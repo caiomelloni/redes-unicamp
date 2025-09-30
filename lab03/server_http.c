@@ -210,7 +210,6 @@ int main(int argc, char **argv) {
 
         pid_t pid;
         if ((pid = Fork()) == 0) {
-          sleep(10);
           Close(listenfd);
           process_request(connfd);
           Close(connfd); // fecha só a conexão aceita; servidor segue escutando
