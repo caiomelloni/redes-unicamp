@@ -1,7 +1,3 @@
-// cliente_base.c — conecta, lê banner do servidor e fecha
-// Compilação: gcc -Wall cliente_base.c -o cliente
-// Uso: ./cliente [IP] [PORT]
-
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
@@ -85,6 +81,17 @@ ssize_t Read(int sockfd, char* banner, int max_line) {
     return n;
 }
 
+// Close fecha a conexao de connfd
+//
+// retorna 0 em caso de successo
+int Close(int connfd) {
+  int sucesso;
+  if ((sucesso = close(connfd)) < 0) {
+    perror("close => erro: não foi possĩvel fechar a conexão");
+  }
+  return sucesso;
+}
+
 
 int main(int argc, char **argv) {
     int    sockfd;
@@ -133,6 +140,6 @@ int main(int argc, char **argv) {
         fflush(stdout);
     }
 
-    close(sockfd);
+    Close(sockfd);
     return 0;
 }
