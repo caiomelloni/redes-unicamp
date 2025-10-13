@@ -8,31 +8,113 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <sys/wait.h>
+#include <signal.h>
+
+
 
 #define LISTENQ      0
 #define MAXLINE 4096
 #define MAXDATASIZE  256
 
-// typedef para deixar o prototipo para a funcao signal mais legivel
-typedef void Sigfunc(int);
+typedef void Sigfunc(int);   /* handler takes int, returns void */
 
-Sigfunc* Signal (int signo, Sigfunc *func) {
-  struct sigaction act, oact;
-  act.sa_handler = func;
-  sigemptyset (&act.sa_mask);
-  act.sa_flags = 0;
-  if (signo == SIGALRM) {
+/* 
+ * Signal instala uma nova função de tratamento (handler) para um sinal
+ * específico e retorna o handler anterior.
+ */
+
+Sigfunc * Signal(int signo, Sigfunc *func) {
+    struct sigaction act, oact; 
+    /* 
+     * act  → estrutura usada para definir o novo comportamento do sinal.
+     * oact → estrutura usada para armazenar o comportamento antigo,
+     *         que será retornado ao final da função.
+     */
+
+    act.sa_handler = func;   
+    /*
+     * Define a função de tratamento (handler) que será chamada
+     * quando o sinal 'signo' for recebido.
+     */
+
+    sigemptyset(&act.sa_mask);
+    /*
+     * Inicializa o conjunto de sinais a serem bloqueados enquanto o
+     * handler estiver sendo executado.
+     * Aqui estamos deixando o conjunto vazio, ou seja, nenhum outro
+     * sinal será bloqueado além do próprio 'signo' — que o kernel
+     * já bloqueia automaticamente durante a execução do handler.
+     */
+
+    act.sa_flags = 0;
+    /*
+     * Inicializa as flags de comportamento. Elas controlam detalhes
+     * de como o kernel entrega sinais e como as chamadas de sistema
+     * (syscalls) se comportam quando um sinal é recebido.
+     */
+
+    if (signo == SIGALRM) {
+        /* 
+         * Sinais de alarme (SIGALRM) costumam ser usados como 
+         * "timeout" para chamadas bloqueantes. 
+         * 
+         * Em sistemas antigos (SunOS 4.x), definimos SA_INTERRUPT 
+         * para que as syscalls sejam *interrompidas* (não reiniciadas)
+         * quando o sinal chega. Isso permite detectar o timeout.
+         */
 #ifdef SA_INTERRUPT
-    act.sa_flags |= SA_INTERRUPT; /* SunOS 4.x */
+        act.sa_flags |= SA_INTERRUPT; /* SunOS 4.x */
 #endif
-  } else {
+    } else {
+        /* 
+         * Para outros sinais, preferimos que as syscalls sejam
+         * automaticamente *reiniciadas* após o retorno do handler,
+         * evitando erros EINTR (Interrupted system call).
+         * 
+         * Isso é o comportamento padrão em sistemas modernos
+         * (SVR4, BSD, Linux).
+         */
 #ifdef SA_RESTART
-    act.sa_flags |= SA_RESTART; /* SVR4, 4.4BSD */
+        act.sa_flags |= SA_RESTART; /* SVR4, 4.4BSD */
 #endif
-  }
-  if (sigaction (signo, &act, &oact) < 0)
-    return (SIG_ERR);
-  return (oact.sa_handler);
+    }
+
+    /*
+     * Agora instalamos o novo handler usando sigaction().
+     *
+     * - signo: sinal que queremos capturar (ex: SIGINT, SIGCHLD, etc.)
+     * - &act : nova configuração
+     * - &oact: armazena a configuração anterior (para retornar ao chamador)
+     */
+    if (sigaction(signo, &act, &oact) < 0)
+        return (SIG_ERR); 
+        /*
+         * Caso sigaction retorne erro (< 0),
+         * devolvemos SIG_ERR, conforme a convenção da API signal().
+         */
+
+    return (oact.sa_handler);
+    /*
+     * Retorna o antigo handler, permitindo restaurá-lo depois,
+     * se necessário. Se não havia handler anterior, pode ser
+     * SIG_DFL (ação padrão) ou SIG_IGN (ignorar o sinal).
+     */
+}
+
+void sig_chld(int signo)
+{
+    pid_t pid;
+    int stat;
+
+    // Recolhe todos os processos filhos que terminaram
+    // (-1 = qualquer filho, WNOHANG = não bloqueia)
+    while ((pid = waitpid(-1, &stat, WNOHANG)) > 0) {
+        printf("child %d terminated\n", pid);
+    }
+
+    // Sai do handler (opcional)
+    return;
 }
 
 // get_time returna uma string com a data atual na forma "Wed Jun 30 21:49:08 1993\n" 
@@ -70,7 +152,6 @@ int Accept(int listenfd) {
   socklen_t cliaddr_len = sizeof(cliaddr);
   int file_descriptor;
   if ((file_descriptor = accept(listenfd, (struct sockaddr *)&cliaddr, &cliaddr_len)) < 0) {
-    perror("accept => erro: não foi possĩvel aceitar uma nova conexão");
     return -1;
   }
 
@@ -147,6 +228,7 @@ int eh_requisicao_get(const char* request) {
 void process_request(int connfd, int sleep_time) {
     struct timespec ts;
     ts.tv_sec = sleep_time;
+    ts.tv_nsec = 0;
     nanosleep(&ts, NULL);
   // lê a mensagem enviada pelo cliente e imprime na saída padrão
   char request[MAXLINE + 1];
@@ -228,18 +310,24 @@ int main(int argc, char **argv) {
     }
 
     // cria o socket
-    listenfd = Socket(AF_INET, SOCK_STREAM);
+    listenfd = Socket();
 
     Bind(listenfd, porta);
 
     log_server_info(listenfd);
 
     Listen(listenfd, backlog);
+    Signal(SIGCHLD, sig_chld);
 
 
     // laço: aceita clientes, processa requisicao e fecha a conexão do cliente
     for (;;) {
-        connfd = Accept(listenfd);
+        if((connfd = Accept(listenfd)) < 0) {
+          if (errno == EINTR)
+            continue; /* se for tratar o sinal,quando voltar dá erro em funções lentas */
+          else
+            perror("accept error");
+        }
 
         pid_t pid;
         if ((pid = Fork()) == 0) {

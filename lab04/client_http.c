@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
     int    sockfd;
 
     // IP/PORT (argumentos ou server.info)
-    char ip[INET_ADDRSTRLEN] = "143.106.16.22";
+    char ip[INET_ADDRSTRLEN + 1] = "143.106.16.22";
     unsigned short port = 0;
 
     if (argc >= 2) strncpy(ip, argv[1], sizeof(ip)-1);
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
         if (f) {
             char line[128]; int got_p = 0;
             while (fgets(line, sizeof(line), f)) {
-                (void)sscanf(line, "IP=%127s", ip);        // lê IP se houver, sem flag
+                (void)sscanf(line, "IP=%16s", ip);        // lê IP se houver, sem flag
                 if (sscanf(line, "PORT=%hu", &port) == 1) got_p = 1;
             }
             fclose(f);
