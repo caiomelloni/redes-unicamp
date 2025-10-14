@@ -189,6 +189,14 @@ int Socket() {
   return listenfd;
 }
 
+void Setsocketopt(int server_fd) {
+  int opt = 1;
+  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+      perror("setsockopt SO_REUSEADDR failed");
+  }
+  return;
+}
+
 // Bind configura o endpoint de conexao criado
 //
 // para a execucao em caso de erro
@@ -311,6 +319,8 @@ int main(int argc, char **argv) {
 
     // cria o socket
     listenfd = Socket();
+    
+    Setsocketopt(listenfd);
 
     Bind(listenfd, porta);
 
