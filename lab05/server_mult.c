@@ -338,16 +338,11 @@ int main(int argc, char **argv) {
           else
             perror("accept error");
         }
-
-        pid_t pid;
-        if ((pid = Fork()) == 0) {
-          Close(listenfd);
-          process_request(connfd, sleep_time);
-          Close(connfd); // fecha só a conexão aceita; servidor segue escutando
-          exit(0);
-        }
-        // essa conexao ja foi direcionada ao filho
-        Close(connfd); // o pai precisa fechar a conexao e continuar recebendo outras
+        
+        // Aqui deve vir o select?
+        
+        process_request(connfd, sleep_time);
+        Close(connfd); // fecha só a conexão aceita; servidor segue escutando
     }
 
     return 0;
